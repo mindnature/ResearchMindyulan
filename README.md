@@ -9,7 +9,9 @@ ResearchMind Yulan 是 ResearchMind 的竞赛版，面向「全球人工智能�
 ```text
 研究问题
   ↓
-证据检索与来源分级
+问题拆解与检索规划
+  ↓
+证据登记与来源审计
   ↓
 Literature Matrix
   ↓
@@ -17,13 +19,11 @@ Research Gap 扫描
   ↓
 竞争性解释 / 反证搜索
   ↓
-研究问题凝练
-  ↓
-方法与识别策略审计
+方法风险审计
   ↓
 Research Advisor 决策增强
   ↓
-研究路线图
+Research Decision Memo
   ↓
 Evidence Audit Trail
 ```
@@ -41,6 +41,96 @@ Evidence Audit Trail
 
 ResearchMind Yulan 的目标是让 Deep Research 从“信息生产”进一步走向**可回源、可质疑、可验证的科研判断支持**。
 
+## 当前可运行版本
+
+`v0.2 — Runnable Pipeline Skeleton`
+
+当前 `main` 已经具备一个最小端到端 Pipeline：
+
+```text
+Research Question
+→ Question Mapper
+→ Search Planner
+→ Evidence Registry
+→ Literature Matrix
+→ Gap Detector
+→ Skeptic / Counter-evidence
+→ Method Auditor
+→ Decision Synthesizer
+→ final_report.md
+→ audit_trail.json
+```
+
+每次运行还会单独保存各阶段结构化中间产物，便于复现、调试和比赛评审展示。
+
+> 当前 Evidence Scout 使用本地 JSON corpus 完成可复现 MVP。真实学术搜索、论文抓取与来源验证是下一阶段 P0 工程任务，不把 synthetic demo corpus 冒充真实文献。
+
+## 5分钟跑起来
+
+要求：Python 3.10+。
+
+```bash
+git clone https://github.com/mindnature/ResearchMindyulan.git
+cd ResearchMindyulan
+python -m pip install -e .
+```
+
+不配置任何 API Key，也可以运行离线可复现 Demo：
+
+```bash
+researchmind-yulan run \
+  --question "How should LLM refusal boundaries be evaluated?" \
+  --discipline ai \
+  --corpus examples/demo_corpus.json \
+  --offline
+```
+
+也可以：
+
+```bash
+python -m researchmind_yulan run \
+  --question "How should LLM refusal boundaries be evaluated?" \
+  --discipline ai \
+  --corpus examples/demo_corpus.json \
+  --offline
+```
+
+运行后生成：
+
+```text
+runs/<run-id>/
+├─ final_report.md
+├─ audit_trail.json
+├─ manifest.json
+└─ stages/
+   ├─ 01_question_mapper.json
+   ├─ 02_search_planner.json
+   ├─ 03_evidence_registry.json
+   ├─ 04_literature_matrix.json
+   ├─ 05_gap_detector.json
+   ├─ 06_counter_evidence.json
+   ├─ 07_method_audit.json
+   └─ 08_stage_status.json
+```
+
+### 启用真实 LLM
+
+复制环境变量模板：
+
+```bash
+cp .env.example .env
+```
+
+然后配置一个兼容 Chat Completions 请求格式的模型端点：
+
+```text
+RM_YULAN_LLM_ENDPOINT=...
+RM_YULAN_LLM_API_KEY=...
+RM_YULAN_LLM_MODEL=...
+```
+
+API Key 不应提交到仓库。
+
 ## 与原版 ResearchMind 的关系
 
 原版 ResearchMind 聚焦“从科研历史中蒸馏顶尖学者可验证的科研判断结构”。
@@ -53,39 +143,33 @@ ResearchMind Yulan 保留这一能力，但将其作为 Deep Research Agent 的�
 2. `SCHOLAR_LENS`：来自特定学者、具有证据支持的人物特异性判断；
 3. `TRANSFER_INFERENCE`：判断某种科研决策结构能否迁移到当前问题。
 
+目前 Scholar Advisor 尚未迁入主链，运行记录会显式标记 `scholar_advisor: not_enabled`，避免把规划中的能力写成已经实现。
+
 ## 比赛版核心模块
 
 ### 1. Research Question Mapper
-把模糊主题转化为可研究的问题、变量、机制、边界条件与待验证假设。
+把模糊主题转化为可研究的问题、冲突、证据缺口与方法风险检查方向。
 
-### 2. Evidence Scout
-检索并建立来源登记表，记录来源类型、时间、可信等级和可回溯链接。
+### 2. Evidence Scout / Registry
+当前 MVP 可对结构化 corpus 进行检索排序和证据登记；下一阶段接入真实学术来源检索与验证。
 
 ### 3. Literature Matrix
-将文献按理论、数据、方法、样本、结论、限制和冲突证据结构化，而不是直接生成流水账综述。
+将证据按方法、结论、限制与立场结构化，而不是直接生成流水账综述。
 
 ### 4. Gap Detector
-固定扫描五类 Research Gap：
-
-- Theory Gap
-- Data Gap
-- Method Gap
-- Context Gap
-- Time Gap
-
-每一个 Gap 都必须绑定证据，并接受反向检索验证。
+目标固定扫描五类 Research Gap：Theory / Data / Method / Context / Time。当前 MVP 已实现 evidence gap、method gap、finding conflict 和 verification gap 的最小检测器。
 
 ### 5. Skeptic / Falsification Agent
-主动寻找反例、替代解释、失败证据和与初步结论冲突的研究，降低确认偏误。
+主动保留负向、混合和冲突证据，避免只围绕初步结论累积支持材料。
 
 ### 6. Method Auditor
-检查研究问题与方法是否匹配，显式暴露识别假设、数据限制、Benchmark 泄漏、外部有效性等风险。
+检查方法信息缺失、实验性证据不足、证据覆盖过小等风险。后续将加入识别策略、外部有效性、Benchmark leakage 等领域规则。
 
 ### 7. Research Advisor
-调用 Generic ResearchMind 与经过证据约束的 Scholar Lens，为研究方向、实验设计和下一步行动提供决策建议。
+下一阶段迁入原 ResearchMind 的 `DOMAIN_BASELINE / SCHOLAR_LENS / TRANSFER_INFERENCE` 与 provenance 机制。
 
 ### 8. Evidence Audit Trail
-最终输出不仅给结论，还保存“这条判断来自哪里、经过了什么验证、仍存在哪些不确定性”。
+每个运行实例保存完整机器可读审计记录和阶段中间产物。
 
 ## 比赛版差异化
 
@@ -101,42 +185,50 @@ ResearchMind Yulan 不追求“像一个大师说话”。核心差异是：
 - Counter-evidence Coverage
 - Decision Usefulness
 - Methodological Rigor
-- Hallucination / Unsupported Claim Rate
+- Unsupported Claim Rate
 
-## 当前状态
+## 测试
 
-`v0.1 — Competition Architecture`
+仓库使用 GitHub Actions 持续集成。也可以本地运行：
 
-当前工作重点：
+```bash
+python -m unittest discover -s tests -v
+```
 
-1. 固定参赛问题定义与系统架构；
-2. 将原版 ResearchMind 的证据审计与 Advisor 能力迁入新主流程；
-3. 建立最小可运行 Deep Research Agent；
-4. 建立 Benchmark 与 baseline 对照实验；
-5. 完成可复现 Demo、技术文档和参赛视频。
+CI 除单元测试外还会执行一次 offline demo，确保 CLI 和端到端主链没有被后续修改破坏。
 
-## 目录规划
+## 当前开发优先级
+
+1. **P0：真实学术检索与 Evidence Registry**；
+2. **P0：迁移 ResearchMind 的证据分级和 Research Advisor**；
+3. **P0：10 个真实 Benchmark case + baseline + ablation**；
+4. P1：可视化 Web Demo；
+5. P1：比赛技术文档和 ≤10 分钟演示视频。
+
+## 当前目录
 
 ```text
 ResearchMindyulan/
+├─ .github/workflows/ci.yml
+├─ .env.example
+├─ pyproject.toml
 ├─ README.md
 ├─ docs/
 │  ├─ COMPETITION_SPEC.md
 │  ├─ ARCHITECTURE.md
-│  ├─ BENCHMARK.md
-│  └─ DEMO_PLAN.md
-├─ src/
-│  ├─ agents/
-│  ├─ pipeline/
-│  ├─ retrieval/
-│  ├─ evaluation/
-│  └─ models/
-├─ prompts/
-├─ schemas/
+│  └─ BENCHMARK.md
 ├─ examples/
-├─ benchmark/
-├─ tests/
-└─ scripts/
+│  └─ demo_corpus.json
+├─ src/researchmind_yulan/
+│  ├─ __init__.py
+│  ├─ __main__.py
+│  ├─ cli.py
+│  ├─ models.py
+│  ├─ pipeline.py
+│  ├─ providers.py
+│  └─ stages.py
+└─ tests/
+   └─ test_pipeline.py
 ```
 
 ## 原项目
