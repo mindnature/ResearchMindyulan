@@ -133,7 +133,24 @@ Produce a concise decision memo with these headings:
 
     def _persist(self, result: PipelineResult) -> None:
         run_dir = self.runs_dir / result.run_id
-        run_dir.mkdir(parents=True, exist_ok=False)
+        stage_dir = run_dir / "stages"
+        stage_dir.mkdir(parents=True, exist_ok=False)
+
+        stage_payloads = {
+            "01_question_mapper.json": asdict(result.question),
+            "02_search_planner.json": [asdict(item) for item in result.queries],
+            "03_evidence_registry.json": [asdict(item) for item in result.evidence],
+            "04_literature_matrix.json": [asdict(item) for item in result.literature_matrix],
+            "05_gap_detector.json": [asdict(item) for item in result.gaps],
+            "06_counter_evidence.json": [asdict(item) for item in result.counter_evidence],
+            "07_method_audit.json": [asdict(item) for item in result.method_risks],
+            "08_stage_status.json": result.stage_status,
+        }
+        for filename, payload in stage_payloads.items():
+            (stage_dir / filename).write_text(
+                json.dumps(payload, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
 
         audit_path = run_dir / "audit_trail.json"
         audit_path.write_text(
@@ -143,6 +160,22 @@ Produce a concise decision memo with these headings:
 
         report_path = run_dir / "final_report.md"
         report_path.write_text(self._render_report(result), encoding="utf-8")
+
+        manifest = {
+            "run_id": result.run_id,
+            "question": result.question.raw,
+            "discipline": result.question.discipline,
+            "stage_status": result.stage_status,
+            "artifacts": [
+                "final_report.md",
+                "audit_trail.json",
+                *[f"stages/{name}" for name in stage_payloads],
+            ],
+        }
+        (run_dir / "manifest.json").write_text(
+            json.dumps(manifest, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
 
     @staticmethod
     def _render_report(result: PipelineResult) -> str:
