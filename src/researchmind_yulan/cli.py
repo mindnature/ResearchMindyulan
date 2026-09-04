@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 from pathlib import Path
 
 from .pipeline import ResearchPipeline, load_corpus
@@ -57,7 +58,7 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument(
         "--offline",
         action="store_true",
-        help="Force deterministic decision synthesis even when LLM environment variables are configured",
+        help="Force deterministic extraction and synthesis even when LLM credentials are configured",
     )
     return parser
 
@@ -98,9 +99,15 @@ def main(argv: list[str] | None = None) -> int:
             corpus=evidence,
             top_k=args.top_k,
         )
+        modes = Counter(item.extraction_mode for item in result.evidence_analysis)
+        mode_summary = ", ".join(f"{key}={value}" for key, value in sorted(modes.items()))
+
         print(f"ResearchMind Yulan run completed: {result.run_id}")
         print(f"Evidence source: {args.source}")
         print(f"Evidence items: {len(result.evidence)}")
+        print(f"Evidence extraction: {mode_summary or 'none'}")
+        print(f"Claim nodes: {len(result.claim_graph.claims)}")
+        print(f"Claim-evidence links: {len(result.claim_graph.links)}")
         print(f"Gap candidates: {len(result.gaps)}")
         print(f"Counter-evidence items: {len(result.counter_evidence)}")
         print(f"Method risks: {len(result.method_risks)}")
