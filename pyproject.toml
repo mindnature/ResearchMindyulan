@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "researchmind-yulan"
+version = "0.1.0"
+description = "Research decision augmented Deep Research Agent for the Yulan competition"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+  {name = "ResearchMind Team"}
+]
+license = {text = "Apache-2.0"}
+dependencies = []
+
+[project.scripts]
+researchmind-yulan = "researchmind_yulan.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
