@@ -5,6 +5,7 @@ from collections import Counter
 from typing import Iterable
 
 from .models import (
+    EvidenceAnalysis,
     EvidenceItem,
     GapCandidate,
     LiteratureRow,
@@ -93,6 +94,29 @@ def build_literature_matrix(evidence: Iterable[EvidenceItem]) -> list[Literature
                 finding=text,
                 limitation=limitation,
                 stance=item.stance,
+            )
+        )
+    return rows
+
+
+def build_literature_matrix_from_analysis(
+    analyses: Iterable[EvidenceAnalysis],
+    evidence: Iterable[EvidenceItem],
+) -> list[LiteratureRow]:
+    evidence_by_id = {item.evidence_id: item for item in evidence}
+    rows: list[LiteratureRow] = []
+    for analysis in analyses:
+        item = evidence_by_id.get(analysis.evidence_id)
+        stance = item.stance if item is not None else "neutral"
+        claim = analysis.claims[0].text if analysis.claims else (item.title if item else "")
+        rows.append(
+            LiteratureRow(
+                evidence_id=analysis.evidence_id,
+                claim=claim,
+                method=analysis.method or "unspecified",
+                finding=analysis.finding,
+                limitation="; ".join(analysis.limitations),
+                stance=stance,
             )
         )
     return rows
