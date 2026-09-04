@@ -7,6 +7,7 @@ from .pipeline import ResearchPipeline, load_corpus
 from .providers import resolve_provider
 from .retrieval import OpenAlexClient
 from .stages import map_question, plan_search
+from .verification import CrossrefClient
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -41,6 +42,17 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Use OpenAlex semantic search instead of lexical search",
     )
+    run_parser.add_argument(
+        "--verify-crossref",
+        action="store_true",
+        help="Cross-check DOI records against Crossref before analysis",
+    )
+    run_parser.add_argument(
+        "--crossref-limit",
+        type=int,
+        default=12,
+        help="Maximum number of DOI records to verify with Crossref",
+    )
     run_parser.add_argument("--top-k", type=int, default=12, help="Maximum evidence items to keep")
     run_parser.add_argument(
         "--offline",
@@ -52,18 +64,24 @@ def build_parser() -> argparse.ArgumentParser:
 
 def _resolve_evidence(args) -> list:
     if args.source == "corpus":
-        return load_corpus(Path(args.corpus))
+        evidence = load_corpus(Path(args.corpus))
+    else:
+        mapped = map_question(args.question, args.discipline)
+        queries = plan_search(mapped)
+        client = OpenAlexClient.from_env()
+        evidence = client.collect(
+            queries,
+            per_query=args.per_query,
+            semantic=args.semantic_openalex,
+        )
+        if not evidence:
+            raise RuntimeError("OpenAlex returned no evidence for the planned queries")
 
-    mapped = map_question(args.question, args.discipline)
-    queries = plan_search(mapped)
-    client = OpenAlexClient.from_env()
-    evidence = client.collect(
-        queries,
-        per_query=args.per_query,
-        semantic=args.semantic_openalex,
-    )
-    if not evidence:
-        raise RuntimeError("OpenAlex returned no evidence for the planned queries")
+    if args.verify_crossref:
+        evidence = CrossrefClient.from_env().verify(
+            evidence,
+            limit=max(1, args.crossref_limit),
+        )
     return evidence
 
 
@@ -86,6 +104,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Gap candidates: {len(result.gaps)}")
         print(f"Counter-evidence items: {len(result.counter_evidence)}")
         print(f"Method risks: {len(result.method_risks)}")
+        print(f"Crossref verification: {'enabled' if args.verify_crossref else 'disabled'}")
         print(f"Outputs: runs/{result.run_id}/final_report.md")
         print(f"         runs/{result.run_id}/audit_trail.json")
         return 0
