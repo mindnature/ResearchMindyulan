@@ -10,9 +10,14 @@ from typing import Iterable
 from .evidence import grade_evidence
 from .models import EvidenceItem, PipelineResult
 from .providers import LLMProvider, resolve_provider
+from .semantic import (
+    apply_analysis_stance,
+    build_claim_evidence_graph,
+    extract_evidence_batch,
+)
 from .stages import (
     audit_methods,
-    build_literature_matrix,
+    build_literature_matrix_from_analysis,
     detect_gaps,
     map_question,
     plan_search,
@@ -50,7 +55,14 @@ class ResearchPipeline:
         evidence = grade_evidence(evidence)
         stage_status["evidence_registry"] = "ok"
 
-        matrix = build_literature_matrix(evidence)
+        evidence_analysis = extract_evidence_batch(self.provider, mapped, evidence)
+        evidence = apply_analysis_stance(evidence, evidence_analysis)
+        stage_status["evidence_extractor"] = "ok"
+
+        claim_graph = build_claim_evidence_graph(evidence_analysis)
+        stage_status["claim_evidence_graph"] = "ok"
+
+        matrix = build_literature_matrix_from_analysis(evidence_analysis, evidence)
         stage_status["literature_matrix"] = "ok"
 
         gaps = detect_gaps(matrix)
@@ -66,6 +78,7 @@ class ResearchPipeline:
             question=question,
             discipline=discipline,
             evidence=evidence,
+            claim_graph=claim_graph,
             gaps=gaps,
             counter_evidence=counter_evidence,
             method_risks=method_risks,
@@ -77,6 +90,8 @@ class ResearchPipeline:
             question=mapped,
             queries=queries,
             evidence=evidence,
+            evidence_analysis=evidence_analysis,
+            claim_graph=claim_graph,
             literature_matrix=matrix,
             gaps=gaps,
             counter_evidence=counter_evidence,
@@ -94,6 +109,7 @@ class ResearchPipeline:
         question: str,
         discipline: str,
         evidence: list[EvidenceItem],
+        claim_graph,
         gaps,
         counter_evidence: list[EvidenceItem],
         method_risks,
@@ -103,6 +119,13 @@ class ResearchPipeline:
             f"provenance={e.metadata.get('provenance_grade', 'unknown')} | {e.excerpt}"
             for e in evidence
         )
+        link_by_claim = {link.claim_id: link for link in claim_graph.links}
+        claim_lines = "\n".join(
+            f"- {claim.claim_id}: {claim.text} | relation="
+            f"{link_by_claim[claim.claim_id].relation if claim.claim_id in link_by_claim else 'neutral'} | "
+            f"evidence={link_by_claim[claim.claim_id].evidence_id if claim.claim_id in link_by_claim else 'unknown'}"
+            for claim in claim_graph.claims
+        )
         gap_lines = "\n".join(f"- {g.gap_type}: {g.statement}" for g in gaps)
         risk_lines = "\n".join(f"- {r.severity}: {r.risk}" for r in method_risks)
         counter_ids = ", ".join(e.evidence_id for e in counter_evidence) or "none"
@@ -110,13 +133,17 @@ class ResearchPipeline:
         system = (
             "You are the Decision Synthesizer inside ResearchMind Yulan. "
             "Do not invent citations or claims. Distinguish established evidence, conflicts, "
-            "research gaps, method risks, and next-step decisions. Be conservative about novelty."
+            "research gaps, method risks, and next-step decisions. Be conservative about novelty. "
+            "Every factual statement should be attributable to an evidence ID when possible."
         )
         user = f"""Research question: {question}
 Discipline: {discipline}
 
 Evidence:
 {evidence_lines}
+
+Claim-Evidence Graph:
+{claim_lines}
 
 Candidate gaps:
 {gap_lines}
@@ -132,6 +159,7 @@ Produce a concise decision memo with these headings:
 3. Strongest counterargument
 4. Method risk that must be resolved
 5. Recommended next experiment or retrieval step
+Use evidence IDs in brackets for claims supported by the supplied records.
 """
         return self.provider.complete(system, user)
 
@@ -144,11 +172,13 @@ Produce a concise decision memo with these headings:
             "01_question_mapper.json": asdict(result.question),
             "02_search_planner.json": [asdict(item) for item in result.queries],
             "03_evidence_registry.json": [asdict(item) for item in result.evidence],
-            "04_literature_matrix.json": [asdict(item) for item in result.literature_matrix],
-            "05_gap_detector.json": [asdict(item) for item in result.gaps],
-            "06_counter_evidence.json": [asdict(item) for item in result.counter_evidence],
-            "07_method_audit.json": [asdict(item) for item in result.method_risks],
-            "08_stage_status.json": result.stage_status,
+            "04_evidence_analysis.json": [asdict(item) for item in result.evidence_analysis],
+            "05_claim_evidence_graph.json": asdict(result.claim_graph),
+            "06_literature_matrix.json": [asdict(item) for item in result.literature_matrix],
+            "07_gap_detector.json": [asdict(item) for item in result.gaps],
+            "08_counter_evidence.json": [asdict(item) for item in result.counter_evidence],
+            "09_method_audit.json": [asdict(item) for item in result.method_risks],
+            "10_stage_status.json": result.stage_status,
         }
         for filename, payload in stage_payloads.items():
             (stage_dir / filename).write_text(
@@ -201,6 +231,13 @@ Produce a concise decision memo with these headings:
             f"stance={e.stance}"
             for e in result.evidence
         )
+        link_by_claim = {link.claim_id: link for link in result.claim_graph.links}
+        claims = "\n".join(
+            f"- `{claim.claim_id}` {claim.text} → "
+            f"{link_by_claim[claim.claim_id].relation if claim.claim_id in link_by_claim else 'neutral'} "
+            f"[`{link_by_claim[claim.claim_id].evidence_id if claim.claim_id in link_by_claim else 'unknown'}`]"
+            for claim in result.claim_graph.claims
+        ) or "- None"
 
         return f"""# ResearchMind Yulan Decision Report
 
@@ -213,6 +250,10 @@ Run ID: `{result.run_id}`
 ## Evidence registry snapshot
 
 {evidence}
+
+## Claim–Evidence Graph
+
+{claims}
 
 ## Candidate research gaps
 
@@ -232,7 +273,7 @@ Run ID: `{result.run_id}`
 
 ## Auditability
 
-The machine-readable run record is stored in `audit_trail.json`. Provenance grades describe source-record traceability, not scientific truth or journal quality. Candidate gaps and recommendations should not be treated as established novelty until targeted retrieval and source verification are complete.
+The machine-readable run record is stored in `audit_trail.json`. Provenance grades describe source-record traceability, not scientific truth or journal quality. Claim relation confidence describes extraction support from the supplied record, not scientific truth. Candidate gaps and recommendations should not be treated as established novelty until targeted retrieval and source verification are complete.
 """
 
 
