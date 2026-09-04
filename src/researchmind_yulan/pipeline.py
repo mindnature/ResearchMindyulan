@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
 
+from .evidence import grade_evidence
 from .models import EvidenceItem, PipelineResult
 from .providers import LLMProvider, resolve_provider
 from .stages import (
@@ -32,7 +33,7 @@ class ResearchPipeline:
         corpus: Iterable[EvidenceItem],
         top_k: int = 12,
     ) -> PipelineResult:
-        run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
         stage_status: dict[str, str] = {}
 
         mapped = map_question(question, discipline)
@@ -45,6 +46,8 @@ class ResearchPipeline:
         if not evidence:
             raise ValueError("No evidence items available after retrieval")
         stage_status["evidence_scout"] = "ok"
+
+        evidence = grade_evidence(evidence)
         stage_status["evidence_registry"] = "ok"
 
         matrix = build_literature_matrix(evidence)
@@ -96,7 +99,8 @@ class ResearchPipeline:
         method_risks,
     ) -> str:
         evidence_lines = "\n".join(
-            f"- {e.evidence_id}: {e.title} | stance={e.stance} | {e.excerpt}"
+            f"- {e.evidence_id}: {e.title} | stance={e.stance} | "
+            f"provenance={e.metadata.get('provenance_grade', 'unknown')} | {e.excerpt}"
             for e in evidence
         )
         gap_lines = "\n".join(f"- {g.gap_type}: {g.statement}" for g in gaps)
@@ -193,7 +197,8 @@ Produce a concise decision memo with these headings:
         ) or "- None detected"
         evidence = "\n".join(
             f"- `{e.evidence_id}` {e.title} | relevance={e.relevance:.3f} | "
-            f"verified={e.verified} | stance={e.stance}"
+            f"record_verified={e.verified} | provenance={e.metadata.get('provenance_grade', 'unknown')} | "
+            f"stance={e.stance}"
             for e in result.evidence
         )
 
@@ -227,7 +232,7 @@ Run ID: `{result.run_id}`
 
 ## Auditability
 
-The machine-readable run record is stored in `audit_trail.json`. Candidate gaps and recommendations should not be treated as established novelty until targeted retrieval and source verification are complete.
+The machine-readable run record is stored in `audit_trail.json`. Provenance grades describe source-record traceability, not scientific truth or journal quality. Candidate gaps and recommendations should not be treated as established novelty until targeted retrieval and source verification are complete.
 """
 
 
