@@ -5,6 +5,8 @@ from pathlib import Path
 
 from .pipeline import ResearchPipeline, load_corpus
 from .providers import resolve_provider
+from .retrieval import OpenAlexClient
+from .stages import map_question, plan_search
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -18,34 +20,68 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--question", required=True, help="Research question to analyze")
     run_parser.add_argument("--discipline", default="general", help="Discipline label")
     run_parser.add_argument(
+        "--source",
+        choices=["corpus", "openalex"],
+        default="corpus",
+        help="Evidence source: reproducible local corpus or live OpenAlex scholarly search",
+    )
+    run_parser.add_argument(
         "--corpus",
         default="examples/demo_corpus.json",
-        help="Path to a JSON evidence corpus",
+        help="Path to a JSON evidence corpus when --source=corpus",
+    )
+    run_parser.add_argument(
+        "--per-query",
+        type=int,
+        default=6,
+        help="OpenAlex results requested for each planned query",
+    )
+    run_parser.add_argument(
+        "--semantic-openalex",
+        action="store_true",
+        help="Use OpenAlex semantic search instead of lexical search",
     )
     run_parser.add_argument("--top-k", type=int, default=12, help="Maximum evidence items to keep")
     run_parser.add_argument(
         "--offline",
         action="store_true",
-        help="Force deterministic provider even when LLM environment variables are configured",
+        help="Force deterministic decision synthesis even when LLM environment variables are configured",
     )
     return parser
+
+
+def _resolve_evidence(args) -> list:
+    if args.source == "corpus":
+        return load_corpus(Path(args.corpus))
+
+    mapped = map_question(args.question, args.discipline)
+    queries = plan_search(mapped)
+    client = OpenAlexClient.from_env()
+    evidence = client.collect(
+        queries,
+        per_query=args.per_query,
+        semantic=args.semantic_openalex,
+    )
+    if not evidence:
+        raise RuntimeError("OpenAlex returned no evidence for the planned queries")
+    return evidence
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
     if args.command == "run":
-        corpus_path = Path(args.corpus)
-        corpus = load_corpus(corpus_path)
+        evidence = _resolve_evidence(args)
         provider = resolve_provider(prefer_llm=not args.offline)
         pipeline = ResearchPipeline(provider=provider)
         result = pipeline.run(
             question=args.question,
             discipline=args.discipline,
-            corpus=corpus,
+            corpus=evidence,
             top_k=args.top_k,
         )
         print(f"ResearchMind Yulan run completed: {result.run_id}")
+        print(f"Evidence source: {args.source}")
         print(f"Evidence items: {len(result.evidence)}")
         print(f"Gap candidates: {len(result.gaps)}")
         print(f"Counter-evidence items: {len(result.counter_evidence)}")
