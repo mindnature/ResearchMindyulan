@@ -1,0 +1,74 @@
+[
+  {
+    "evidence_id": "E001",
+    "title": "Synthetic study: refusal boundary benchmark across harmfulness levels",
+    "source_type": "synthetic_demo",
+    "url": "",
+    "excerpt": "A benchmark study reports that refusal behavior changes sharply across prompt harmfulness levels, but the limitation is that only English prompts and a small set of model families were evaluated.",
+    "stance": "positive",
+    "verified": false
+  },
+  {
+    "evidence_id": "E002",
+    "title": "Synthetic study: over-refusal on benign prompts",
+    "source_type": "synthetic_demo",
+    "url": "",
+    "excerpt": "The experiment finds substantial over-refusal on benign prompts that contain sensitive keywords. However, performance differs across instruction styles and deployment settings.",
+    "stance": "counter",
+    "verified": false
+  },
+  {
+    "evidence_id": "E003",
+    "title": "Synthetic survey: taxonomies of refusal behavior",
+    "source_type": "synthetic_demo",
+    "url": "",
+    "excerpt": "A survey organizes refusal behavior into full refusal, partial compliance, safe redirection, and evasive responses. It notes a lack of agreement on boundary labels and evaluation criteria.",
+    "stance": "mixed",
+    "verified": false
+  },
+  {
+    "evidence_id": "E004",
+    "title": "Synthetic benchmark: multilingual refusal consistency",
+    "source_type": "synthetic_demo",
+    "url": "",
+    "excerpt": "A multilingual benchmark finds that refusal consistency is lower outside English. The dataset remains limited in low-resource languages and culturally specific safety contexts.",
+    "stance": "negative",
+    "verified": false
+  },
+  {
+    "evidence_id": "E005",
+    "title": "Synthetic case study: policy wording and safety behavior",
+    "source_type": "synthetic_demo",
+    "url": "",
+    "excerpt": "A case study suggests that small changes in policy wording can shift the boundary between compliance and refusal, but causal attribution is unclear because model versions also changed.",
+    "stance": "mixed",
+    "verified": false
+  },
+  {
+    "evidence_id": "E006",
+    "title": "Synthetic dataset paper: adversarially paraphrased safety prompts",
+    "source_type": "synthetic_demo",
+    "url": "",
+    "excerpt": "The dataset contains adversarial paraphrases designed to probe refusal robustness. Evaluation reveals failure cases in which semantically similar prompts receive inconsistent safety decisions.",
+    "stance": "negative",
+    "verified": false
+  },
+  {
+    "evidence_id": "E007",
+    "title": "Synthetic evaluation: human judgments of appropriate refusal",
+    "source_type": "synthetic_demo",
+    "url": "",
+    "excerpt": "A human evaluation shows disagreement between annotators about when a refusal is appropriate. The main limitation is that demographic and domain-specific differences are not modeled.",
+    "stance": "mixed",
+    "verified": false
+  },
+  {
+    "evidence_id": "E008",
+    "title": "Synthetic methods note: calibration of refusal thresholds",
+    "source_type": "synthetic_demo",
+    "url": "",
+    "excerpt": "A simulation explores calibrated refusal thresholds and demonstrates a trade-off between unsafe compliance and excessive refusal. The study does not validate the threshold on deployed systems.",
+    "stance": "counter",
+    "verified": false
+  }
+]
