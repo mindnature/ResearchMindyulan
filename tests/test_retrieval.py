@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import unittest
 
-from researchmind_yulan.retrieval import OpenAlexClient, reconstruct_abstract
+from researchmind_yulan.retrieval import (
+    OpenAlexClient,
+    reconstruct_abstract,
+    sanitize_openalex_query,
+)
 
 
 class RetrievalTest(unittest.TestCase):
@@ -16,6 +20,16 @@ class RetrievalTest(unittest.TestCase):
         self.assertEqual(
             reconstruct_abstract(index),
             "ResearchMind tests research decisions",
+        )
+
+    def test_sanitize_openalex_query_removes_natural_language_wildcards(self):
+        self.assertEqual(
+            sanitize_openalex_query("How should LLM refusal boundaries be evaluated?"),
+            "How should LLM refusal boundaries be evaluated",
+        )
+        self.assertEqual(
+            sanitize_openalex_query("refusal * boundary?? evaluation"),
+            "refusal boundary evaluation",
         )
 
     def test_openalex_work_to_evidence(self):
