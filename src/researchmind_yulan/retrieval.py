@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -20,6 +21,18 @@ def reconstruct_abstract(inverted_index: dict[str, list[int]] | None) -> str:
             positions.append((int(index), word))
     positions.sort(key=lambda item: item[0])
     return " ".join(word for _, word in positions)
+
+
+def sanitize_openalex_query(query: str) -> str:
+    """Convert a natural-language research question into a safe OpenAlex search string.
+
+    OpenAlex treats '*' and '?' as wildcard syntax. Natural-language research
+    questions often end in '?', which makes a normal stemmed search invalid.
+    Competition queries are not intended to use wildcard semantics, so strip
+    those characters before sending the request.
+    """
+    cleaned = re.sub(r"[*?]+", " ", query)
+    return " ".join(cleaned.split()).strip()
 
 
 def _author_names(work: dict) -> list[str]:
@@ -55,6 +68,10 @@ class OpenAlexClient:
 
     def search(self, query: str, per_page: int = 8, semantic: bool = False) -> list[EvidenceItem]:
         per_page = max(1, min(int(per_page), 50 if semantic else 100))
+        safe_query = sanitize_openalex_query(query)
+        if not safe_query:
+            raise ValueError("OpenAlex query is empty after sanitization")
+
         params: dict[str, str | int] = {
             "per_page": per_page,
             "select": ",".join(
@@ -72,7 +89,7 @@ class OpenAlexClient:
                 ]
             ),
         }
-        params["search.semantic" if semantic else "search"] = query
+        params["search.semantic" if semantic else "search"] = safe_query
         if self.api_key:
             params["api_key"] = self.api_key
 
@@ -85,6 +102,13 @@ class OpenAlexClient:
         try:
             with urllib.request.urlopen(request, timeout=self.timeout) as response:
                 payload = json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            try:
+                detail = exc.read().decode("utf-8", errors="replace")
+            except Exception:
+                detail = ""
+            suffix = f" | {detail[:500]}" if detail else ""
+            raise RuntimeError(f"OpenAlex retrieval failed: HTTP {exc.code}{suffix}") from exc
         except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
             raise RuntimeError(f"OpenAlex retrieval failed: {exc}") from exc
 
