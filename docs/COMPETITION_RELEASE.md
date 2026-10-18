@@ -58,7 +58,10 @@ A real LLM provider has not yet been tested in this release with a user credenti
 
 - Topic gate: conservative keywords first, optional LLM semantic relevance check.
   Precision is prioritized over recall, so some relevant papers may be missed.
-- Claim–Evidence graph: source traceability only. Current links do not provide
+- Claim–Evidence graph: model claims require an exact supporting source span.
+  Missing/nonexistent quotation causes per-record heuristic fallback. This checks
+  literal traceability, not scientific truth or substantive entailment.
+  Current links do not provide
   full-text independent verification or causal cross-document entailment.
 - Contradictions: a negative-sounding word like 'however' or 'failure' does not
   constitute counter-evidence. Genuine contradictory claims need explicit labels

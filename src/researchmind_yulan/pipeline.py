@@ -269,6 +269,8 @@ Use evidence IDs in brackets for claims supported by the supplied records.
             f"- `{claim.claim_id}` {claim.text} → "
             f"{link_by_claim[claim.claim_id].relation if claim.claim_id in link_by_claim else 'neutral'} "
             f"[`{link_by_claim[claim.claim_id].evidence_id if claim.claim_id in link_by_claim else 'unknown'}`]"
+            f" | source span: {link_by_claim[claim.claim_id].supporting_quote[:240] if claim.claim_id in link_by_claim else 'none'}"
+            f" | span verified: {link_by_claim[claim.claim_id].span_verified if claim.claim_id in link_by_claim else False}"
             for claim in result.claim_graph.claims
         ) or "- None"
 

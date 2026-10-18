@@ -28,11 +28,13 @@ class JsonProvider:
                         "text": "Binary refusal rate can hide boundary variation.",
                         "relation": "supporting",
                         "confidence": 0.91,
+                        "supporting_quote": "A benchmark reports a limitation in binary refusal evaluation.",
                     },
                     {
                         "text": "The result may not generalize across languages.",
                         "relation": "boundary",
                         "confidence": 0.84,
+                        "supporting_quote": "A benchmark reports a limitation in binary refusal evaluation.",
                     },
                 ],
             }
@@ -42,6 +44,14 @@ class JsonProvider:
 class InvalidProvider:
     def complete(self, system: str, user: str) -> str:
         return "not-json"
+
+
+class FakeQuoteProvider:
+    def complete(self, system: str, user: str) -> str:
+        return JsonProvider().complete(system, user).replace(
+            "A benchmark reports a limitation in binary refusal evaluation.",
+            "This is a fabricated excerpt that is not present in the source."
+        )
 
 
 class SemanticExtractionTest(unittest.TestCase):
@@ -69,6 +79,12 @@ class SemanticExtractionTest(unittest.TestCase):
         self.assertEqual(len(graph.claims), 2)
         self.assertEqual(graph.links[0].evidence_id, "E001")
         self.assertEqual(graph.links[0].relation, "supporting")
+        self.assertTrue(graph.links[0].span_verified)
+
+    def test_fabricated_quote_is_rejected(self):
+        analysis = extract_evidence(FakeQuoteProvider(), self.question, self.item)
+        self.assertEqual(analysis.extraction_mode, "heuristic")
+        self.assertFalse(any(c.span_verified and "fabricated" in c.supporting_quote for c in analysis.claims))
 
     def test_invalid_llm_output_falls_back(self):
         analysis = extract_evidence(InvalidProvider(), self.question, self.item)

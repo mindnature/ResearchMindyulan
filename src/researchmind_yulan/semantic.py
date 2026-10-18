@@ -112,7 +112,11 @@ def _heuristic_analysis(item: EvidenceItem) -> EvidenceAnalysis:
         method=method,
         finding=text,
         limitations=limitations,
-        claims=[ExtractedClaim(text=claim_text, relation=relation, confidence=0.45)],
+        claims=[ExtractedClaim(
+            text=claim_text, relation=relation, confidence=0.45,
+            supporting_quote=claim_text,
+            span_verified=bool(claim_text and claim_text in text),
+        )],
         extraction_mode="heuristic",
     )
 
@@ -160,7 +164,7 @@ Return exactly this schema:
   "limitations": ["explicit limitation"],
   "boundary_conditions": ["scope or condition"],
   "claims": [
-    {{"text": "atomic claim", "relation": "supporting|contradicting|boundary|neutral", "confidence": 0.0}}
+    {{"text": "atomic claim", "relation": "supporting|contradicting|boundary|neutral", "confidence": 0.0, "supporting_quote": "EXACT verbatim 12+ character substring from the supplied title or text"}}
   ]
 }}
 Keep at most 3 claims. Confidence is confidence that the supplied text supports the extraction, not confidence that the claim is scientifically true."""
@@ -180,17 +184,22 @@ Keep at most 3 claims. Confidence is confidence that the supplied text supports 
             if not isinstance(row, dict):
                 continue
             text = str(row.get("text") or "").strip()
-            if not text:
+            quote = str(row.get("supporting_quote") or "").strip()
+            record = f"{item.title} {item.excerpt}"
+            if not text or len(quote) < 12 or quote.casefold() not in record.casefold():
+                # Reject ungrounded model output even if it sounds plausible.
                 continue
             claims.append(
                 ExtractedClaim(
                     text=text,
                     relation=_relation(row.get("relation")),
                     confidence=_confidence(row.get("confidence")),
+                    supporting_quote=quote,
+                    span_verified=True,
                 )
             )
     if not claims:
-        claims = fallback.claims
+        return fallback
 
     limitations = payload.get("limitations")
     boundary_conditions = payload.get("boundary_conditions")
@@ -235,6 +244,8 @@ def build_claim_evidence_graph(analyses: Iterable[EvidenceAnalysis]) -> ClaimEvi
                     evidence_id=analysis.evidence_id,
                     relation=claim.relation,
                     confidence=claim.confidence,
+                    supporting_quote=claim.supporting_quote,
+                    span_verified=claim.span_verified,
                 )
             )
     return ClaimEvidenceGraph(claims=nodes, links=links)

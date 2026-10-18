@@ -145,7 +145,9 @@ with graph:
     st.dataframe([
         {"Claim": node.claim_id, "Text": node.text,
          "Evidence": links[node.claim_id].evidence_id if node.claim_id in links else "",
-         "Relation": links[node.claim_id].relation if node.claim_id in links else ""}
+         "Relation": links[node.claim_id].relation if node.claim_id in links else "",
+         "Quote verified": links[node.claim_id].span_verified if node.claim_id in links else False,
+         "Exact source span": links[node.claim_id].supporting_quote if node.claim_id in links else ""}
         for node in result.claim_graph.claims
     ], width="stretch", hide_index=True)
 
