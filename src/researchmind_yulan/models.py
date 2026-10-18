@@ -35,6 +35,8 @@ class ExtractedClaim:
     text: str
     relation: str = "neutral"
     confidence: float = 0.5
+    supporting_quote: str = ""
+    span_verified: bool = False
 
 
 @dataclass
@@ -63,6 +65,8 @@ class ClaimEvidenceLink:
     evidence_id: str
     relation: str
     confidence: float
+    supporting_quote: str = ""
+    span_verified: bool = False
 
 
 @dataclass
@@ -87,6 +91,7 @@ class GapCandidate:
     statement: str
     supporting_evidence_ids: list[str]
     confidence: float
+    verification_status: str = "unverified_candidate"
 
 
 @dataclass
@@ -110,6 +115,8 @@ class PipelineResult:
     decision_summary: str
     stage_status: dict[str, str]
     run_id: str
+    skeptic_traces: list[dict[str, Any]] = field(default_factory=list)
+    rejected_evidence: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

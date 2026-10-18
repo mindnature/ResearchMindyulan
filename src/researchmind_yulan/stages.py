@@ -147,7 +147,8 @@ def detect_gaps(matrix: Iterable[LiteratureRow]) -> list[GapCandidate]:
                 confidence=0.72,
             )
         )
-    if len(stances) >= 2:
+    # Mixed/boundary labels alone cannot establish contradictory findings.
+    if "positive" in stances and ("counter" in stances or "negative" in stances):
         gaps.append(
             GapCandidate(
                 gap_type="theory_or_finding_conflict",
@@ -169,12 +170,9 @@ def detect_gaps(matrix: Iterable[LiteratureRow]) -> list[GapCandidate]:
 
 
 def select_counter_evidence(evidence: Iterable[EvidenceItem]) -> list[EvidenceItem]:
-    items = list(evidence)
-    explicit = [i for i in items if i.stance in {"negative", "mixed", "counter"}]
-    if explicit:
-        return explicit
-    markers = ("fail", "risk", "limitation", "not", "however", "harm", "bias")
-    return [i for i in items if any(m in i.excerpt.lower() for m in markers)]
+    # Only explicit counter-stance classifications qualify. A keyword does
+    # not establish that findings contradict another claim.
+    return [item for item in evidence if item.stance in {"counter", "negative"}]
 
 
 def audit_methods(matrix: Iterable[LiteratureRow]) -> list[MethodRisk]:

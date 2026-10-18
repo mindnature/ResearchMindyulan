@@ -5,11 +5,12 @@ import os
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterable
+from typing import Any, Iterable
 
 from .evidence import grade_evidence
 from .models import EvidenceItem, PipelineResult
 from .providers import LLMProvider, resolve_provider
+from .skeptic import investigate_gaps
 from .semantic import (
     apply_analysis_stance,
     build_claim_evidence_graph,
@@ -27,9 +28,13 @@ from .stages import (
 
 
 class ResearchPipeline:
-    def __init__(self, provider: LLMProvider | None = None, runs_dir: str | Path | None = None):
+    def __init__(
+        self, provider: LLMProvider | None = None,
+        runs_dir: str | Path | None = None, counter_search_client: Any | None = None,
+    ):
         self.provider = provider or resolve_provider(prefer_llm=True)
         self.runs_dir = Path(runs_dir or os.getenv("RM_YULAN_RUNS_DIR", "runs"))
+        self.counter_search_client = counter_search_client
 
     def run(
         self,
@@ -37,6 +42,8 @@ class ResearchPipeline:
         discipline: str,
         corpus: Iterable[EvidenceItem],
         top_k: int = 12,
+        queries: list | None = None,
+        rejected_evidence: list[EvidenceItem] | None = None,
     ) -> PipelineResult:
         run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
         stage_status: dict[str, str] = {}
@@ -44,7 +51,7 @@ class ResearchPipeline:
         mapped = map_question(question, discipline)
         stage_status["question_mapper"] = "ok"
 
-        queries = plan_search(mapped)
+        queries = queries if queries is not None else plan_search(mapped)
         stage_status["search_planner"] = "ok"
 
         evidence = rank_evidence(mapped, corpus)[:top_k]
@@ -68,8 +75,26 @@ class ResearchPipeline:
         gaps = detect_gaps(matrix)
         stage_status["gap_detector"] = "ok"
 
+        skeptic_traces: list[dict] = []
+        if self.counter_search_client is not None:
+            extra, traces = investigate_gaps(
+                question, gaps, self.counter_search_client,
+                existing_ids={item.evidence_id for item in evidence},
+            )
+            skeptic_traces = [asdict(trace) for trace in traces]
+            if extra:
+                extra = grade_evidence(extra)
+                extra_analyses = extract_evidence_batch(self.provider, mapped, extra)
+                extra = apply_analysis_stance(extra, extra_analyses)
+                evidence.extend(extra)
+                evidence_analysis.extend(extra_analyses)
+                claim_graph = build_claim_evidence_graph(evidence_analysis)
+                matrix = build_literature_matrix_from_analysis(evidence_analysis, evidence)
+                gaps = detect_gaps(matrix)
+            stage_status["skeptic_counter_search"] = "executed" if traces else "no_candidates"
+        else:
+            stage_status["skeptic_counter_search"] = "not_enabled"
         counter_evidence = select_counter_evidence(evidence)
-        stage_status["skeptic_counter_search"] = "ok"
 
         method_risks = audit_methods(matrix)
         stage_status["method_auditor"] = "ok"
@@ -99,6 +124,12 @@ class ResearchPipeline:
             decision_summary=decision_summary,
             stage_status=stage_status,
             run_id=run_id,
+            skeptic_traces=skeptic_traces,
+            rejected_evidence=[
+                {"evidence_id": e.evidence_id, "title": e.title,
+                 "topic_relevance": e.metadata.get("topic_relevance", {})}
+                for e in (rejected_evidence or [])
+            ],
         )
         self._persist(result)
         return result
@@ -179,6 +210,8 @@ Use evidence IDs in brackets for claims supported by the supplied records.
             "08_counter_evidence.json": [asdict(item) for item in result.counter_evidence],
             "09_method_audit.json": [asdict(item) for item in result.method_risks],
             "10_stage_status.json": result.stage_status,
+            "11_skeptic_second_pass.json": result.skeptic_traces,
+            "12_retrieval_rejections.json": result.rejected_evidence,
         }
         for filename, payload in stage_payloads.items():
             (stage_dir / filename).write_text(
@@ -236,7 +269,19 @@ Use evidence IDs in brackets for claims supported by the supplied records.
             f"- `{claim.claim_id}` {claim.text} → "
             f"{link_by_claim[claim.claim_id].relation if claim.claim_id in link_by_claim else 'neutral'} "
             f"[`{link_by_claim[claim.claim_id].evidence_id if claim.claim_id in link_by_claim else 'unknown'}`]"
+            f" | source span: {link_by_claim[claim.claim_id].supporting_quote[:240] if claim.claim_id in link_by_claim else 'none'}"
+            f" | span verified: {link_by_claim[claim.claim_id].span_verified if claim.claim_id in link_by_claim else False}"
             for claim in result.claim_graph.claims
+        ) or "- None"
+
+        second_pass = "\n".join(
+            f"- {t['gap_type']}: query={t['query']}; new records={len(t['retrieved_evidence_ids'])}; "
+            f"status={t['conclusion']}; error={t['error'] or 'none'}"
+            for t in result.skeptic_traces
+        ) or "- Not performed"
+        rejected = "\n".join(
+            f"- {r['evidence_id']}: {r['title']} (reason={r['topic_relevance'].get('reason')})"
+            for r in result.rejected_evidence
         ) or "- None"
 
         return f"""# ResearchMind Yulan Decision Report
@@ -263,6 +308,14 @@ Run ID: `{result.run_id}`
 
 {counter}
 
+## Skeptic second-pass search (prior art, not proven contradictions)
+
+{second_pass}
+
+## Topic relevance exclusions
+
+{rejected}
+
 ## Method audit
 
 {risks}
@@ -273,7 +326,7 @@ Run ID: `{result.run_id}`
 
 ## Auditability
 
-The machine-readable run record is stored in `audit_trail.json`. Provenance grades describe source-record traceability, not scientific truth or journal quality. Claim relation confidence describes extraction support from the supplied record, not scientific truth. Candidate gaps and recommendations should not be treated as established novelty until targeted retrieval and source verification are complete.
+The machine-readable run record is stored in `audit_trail.json`. Provenance grades describe source-record traceability, not scientific truth or journal quality. Claim relation confidence describes extraction support from the supplied record, not scientific truth. Candidate gaps, counter-search results, and recommendations are NOT validated novelty or verified scientific contradictions. Source records may be title/abstract only. Do not interpret a DOI match as scientific validation.
 """
 
 

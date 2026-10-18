@@ -1,5 +1,21 @@
 # ResearchMind Yulan
 
+## 比赛演示版：已具备可运行的 Web Demo
+
+- 浏览器版：证据看板、Claim–Evidence 图谱、候选 Research Gap、Skeptic 二轮检索及审计报告。
+- 质量约束：真实文献主题过滤、可选大模型语义筛选、Crossref 元数据核验；不将“局限性”自动标成反证。
+- 自动测试：Python 单元测试 + Streamlit 无界面交互测试 + 离线完整流水线。
+- 注意：目前属于**可运行比赛原型**，尚未完成真实模型 API 全链路实测及独立专家 Benchmark，不能宣称已达到获奖水平。
+
+~~~powershell
+python -m pip install -e ".[web]"
+python -m unittest discover -s tests -v
+streamlit run src/researchmind_yulan/webapp.py
+~~~
+
+详见 [比赛版操作与质量门禁](docs/COMPETITION_RELEASE.md)。
+
+
 > 面向真实学术场景的科研决策增强型 Deep Research Agent
 
 ResearchMind Yulan 是 ResearchMind 的竞赛版，面向「全球人工智能创新·治理·安全大赛」赛道一：**面向真实学术场景的深度研究智能体设计大赛**。
