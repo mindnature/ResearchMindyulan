@@ -14,6 +14,9 @@ authors = [
 license = {text = "Apache-2.0"}
 dependencies = []
 
+[project.optional-dependencies]
+web = ["streamlit>=1.45,<2"]
+
 [project.scripts]
 researchmind-yulan = "researchmind_yulan.cli:main"
 

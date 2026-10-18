@@ -100,12 +100,10 @@ def _heuristic_analysis(item: EvidenceItem) -> EvidenceAnalysis:
     if any(marker in lowered for marker in ("limitation", "limited", "however", "unclear", "few", "lack")):
         limitations.append(text)
 
+    # Source mentions of "failure", "however" or "bias" do NOT establish
+    # contradiction against another study. Keep stance neutral unless the
+    # source record explicitly supplies a labeled relation.
     relation = _relation(item.stance)
-    if relation == "neutral":
-        if any(marker in lowered for marker in ("fail", "harm", "bias", "over-refusal", "contradict")):
-            relation = "contradicting"
-        elif any(marker in lowered for marker in ("however", "only", "limited", "depends", "vary")):
-            relation = "boundary"
 
     claim_text = _first_sentence(text) or item.title
     return EvidenceAnalysis(
@@ -133,9 +131,13 @@ Extract only information supported by the supplied evidence record. Never invent
 Return one JSON object only, with no markdown and no prose outside JSON.
 Relation labels describe how a claim bears on the user's research question:
 - supporting: directly supports a proposition relevant to the question
-- contradicting: provides evidence against a relevant proposition or common assumption
-- boundary: qualifies a proposition by population, context, method, time, or condition
-- neutral: relevant but not directional
+- contradicting: only if the paper explicitly challenges a specified claim;
+  a research QUESTION is not itself a claim to contradict.
+- boundary: qualifies a specified claim by population, context, method, time, or condition
+- neutral: no explicit directional relation is established.
+Do not classify a paper as contradicting just because it discusses failure,
+risk, harm, over-refusal, or contains "however". Never infer a cross-paper
+contradiction without an explicit competing proposition.
 Use 'unspecified' or empty arrays when the record does not contain the information."""
 
     user = f"""Research question: {question.raw}
